@@ -1,165 +1,40 @@
-# Token Saver Policy Reference
+# Token Saver policy reference
 
-## 1. Context ROI model
+## Preservation
 
-Score a context chunk from 0 to 1:
+Always retain the current task contract, approval boundaries, accepted artifacts, explicit decisions, essential evidence, unresolved material risks, and exact content whose meaning could change under summarization.
 
-```text
-score =
-  kind_weight
-  × relevance
-  × freshness
-  × authority
-  × uniqueness
-  × dependency
-```
+Exact or code content may become a source reference only when the caller has verified the source is stable and reopenable and sets `metadata.reopenable=true`. A source string alone is insufficient. Otherwise keep the content verbatim. Never summarize exact legal text, security-sensitive commands, numerical datasets, or code when exactness is required.
 
-Where:
+## Context decisions
 
-- `kind_weight` is configured by chunk type.
-- `relevance` measures overlap or semantic connection to the current task.
-- `freshness` falls when a chunk is superseded.
-- `authority` rises for primary sources, executable tests, and explicit user decisions.
-- `uniqueness` falls for duplicate or near-duplicate material.
-- `dependency` rises when later work directly relies on the chunk.
+Score non-protected material by kind, relevance, freshness, authority, uniqueness, and dependency. Then choose:
 
-Decisions:
+- `keep` when compact and needed now;
+- `compress` when relevant but verbose and safe to paraphrase;
+- `reference` when a stable source can be reopened cheaply;
+- `discard` when duplicate, rejected, superseded, unrelated, or low value.
 
-- Keep when the score exceeds the mode threshold and the chunk is compact.
-- Compress when it exceeds the threshold but is verbose.
-- Reference when the source can be re-opened cheaply and exact contents are not needed now.
-- Discard when below threshold, superseded, rejected, or duplicative.
+If protected content alone exceeds the configured budget, return `status=infeasible`. Do not falsify compliance by dropping it.
 
-Hard-preserve current requests, explicit constraints, accepted artifacts, material safety information, and evidence required by the output—even if lexical relevance appears low.
+## Safe handoff
 
-## 2. Quality gates
+A handoff should answer:
 
-A compacted bundle passes only if a reviewer can answer:
+1. What is the goal and acceptance test?
+2. What is constrained or forbidden?
+3. Which decisions and artifacts are current?
+4. What evidence supports the next action?
+5. What remains unresolved?
 
-1. What is being done?
-2. What counts as complete?
-3. What is forbidden or constrained?
-4. What decisions are already settled?
-5. Which artifact is current?
-6. What evidence supports the next action or final claim?
-7. What remains unresolved?
+Normal compact output contains the selected handoff content plus fingerprints and decision metadata. It must not serialize original discarded chunks.
 
-If any answer is missing, restore the smallest chunk that supplies it.
+## State
 
-## 3. Summarization rules
+State defaults to `<git-root>/.token-saver/state.sqlite3` and a repository-plus-branch scope. SQLite transactions protect concurrent artifact acceptance, retry counters, and handoff replacement. Use an explicit shared `--state-scope` only when agents intentionally coordinate.
 
-A summary should preserve:
+Retry signatures expire after the configured TTL and can be reset. A retry must change evidence, inputs, hypothesis, strategy, method, or scope after the allowed identical attempts are exhausted.
 
-- entities, values, dates, identifiers, paths, and versions;
-- decisions and their rationale when the rationale affects future work;
-- failures and the tested conditions;
-- source provenance or line ranges;
-- unresolved contradictions and uncertainty;
-- API contracts, schemas, and acceptance tests.
+## Evaluation
 
-Drop:
-
-- greetings and transitions;
-- repeated explanation;
-- abandoned alternatives after the rejection reason is captured;
-- verbose logs after extracting the failing command, error, and relevant state;
-- generic advice;
-- raw reasoning traces.
-
-Never summarize exact legal language, security-sensitive commands, numerical datasets, or code when exactness is required. Reference or extract the exact passage instead.
-
-## 4. Artifact lifecycle
-
-States:
-
-- `candidate`: generated but not accepted.
-- `accepted`: explicitly accepted or designated by the user.
-- `superseded`: replaced by a later accepted artifact.
-- `rejected`: explicitly rejected.
-- `archived`: retained locally but excluded from normal carry-forward.
-
-Only one artifact per logical label should normally be accepted. Accepting a new artifact supersedes the prior accepted artifact with the same label.
-
-Carry-forward record:
-
-```json
-{
-  "goal": "...",
-  "constraints": ["..."],
-  "decisions": ["..."],
-  "accepted_artifact": {
-    "id": "...",
-    "path": "...",
-    "fingerprint": "..."
-  },
-  "open_issues": ["..."],
-  "evidence": [
-    {"source": "path", "range": "L10-L24", "claim": "..."}
-  ],
-  "next_action": "..."
-}
-```
-
-## 5. Retry policy
-
-Retry automatically only for plausible transient failures: timeouts, rate limits, network errors, temporary locks, or flaky tests with known nondeterminism.
-
-Do not retry unchanged:
-
-- syntax or type errors;
-- permission failures;
-- invalid credentials;
-- deterministic assertion failures;
-- malformed requests;
-- missing required input;
-- rejected external actions.
-
-After two matching failures, stop by default. Report the stable failure signature and the smallest useful diagnostic.
-
-## 6. Model-tier rubric
-
-Add points:
-
-- +1 for more than 5 relevant files.
-- +1 for cross-module or cross-domain synthesis.
-- +1 for ambiguous requirements.
-- +1 for architecture or migration design.
-- +1 for high-stakes legal, financial, medical, security, or production risk.
-- +1 for debugging without a reproducible failure.
-- +1 for adversarial review or formal verification.
-- +1 for long-horizon planning with tradeoffs.
-
-Subtract:
-
-- -2 for exact deterministic transformation.
-- -1 for simple extraction or formatting.
-- -1 when a reliable script fully defines the operation.
-
-Recommendation:
-
-- score <= 0: economy;
-- score 1–3: standard;
-- score >= 4: powerful.
-
-This is a starting heuristic. Representative evaluations outrank the score.
-
-## 7. Metrics
-
-Track:
-
-- estimated input tokens before and after;
-- estimated output tokens;
-- cached or fingerprinted context not retransmitted;
-- chunks kept, compressed, referenced, and discarded;
-- files considered versus opened;
-- retries avoided;
-- output-contract pass/fail;
-- task-quality pass/fail.
-
-Report savings as:
-
-```text
-1 - compacted_estimated_tokens / original_estimated_tokens
-```
-
-Do not present this as a billing guarantee.
+Measure task success and required-fact retention before token reduction. Then compare estimated input/output tokens, files opened, retries avoided, latency, and cost. Character-based token estimates are approximate; synthetic benchmarks are regression fixtures, not billing claims.

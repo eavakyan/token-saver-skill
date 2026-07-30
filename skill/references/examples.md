@@ -1,63 +1,39 @@
-# Examples
+# Token Saver examples
 
-## Example 1: Large repository bug
+## Compact input
 
-Request: Fix a refresh-token race condition.
-
-Keep:
-
-- public API constraint;
-- failing test and exact assertion;
-- relevant authentication files and call graph;
-- accepted design decision;
-- modified diff and test result.
-
-Compress:
-
-- full test logs to command, failure, and key stack frames;
-- architecture docs to the relevant locking and token lifecycle passages.
-
-Reference:
-
-- unchanged dependency lockfile;
-- full API documentation by path and section.
-
-Discard:
-
-- rejected database-lock approach after recording why it was rejected;
-- duplicate stack traces;
-- earlier patch superseded by the accepted patch.
-
-## Example 2: Editorial rewrite
-
-Request: Rewrite an 800-word article to exactly 500 words without losing names, dates, quotations, or the central argument.
-
-Keep the source article and exact constraints. Do not load unrelated style guides. Generate one candidate, count words deterministically, and revise only the overage or deficit. Validate exact count before returning. Do not include commentary outside the 500 words.
-
-## Example 3: Five-bullet analysis
-
-Output contract:
-
-- exactly five Markdown bullets;
-- each bullet one sentence;
-- ordered by severity;
-- include evidence path and line range;
-- no introduction or conclusion.
-
-Validate bullet count. A five-bullet response plus a preamble is a failure.
-
-## Example 4: Long conversation handoff
-
-Create a fresh continuation:
-
-```text
-Goal: Ship the import feature.
-Constraints: Preserve CSV compatibility; no schema migration.
-Accepted artifact: docs/import-plan-v3.md (sha256: ...).
-Decisions: Stream input; reject invalid rows; report row numbers.
-Evidence: parser.py L40-L120; tests/test_import.py L12-L88.
-Open issue: memory usage above 2 GB files.
-Next action: implement streaming parser and run import tests.
+```json
+{
+  "request": "Fix the refresh-token race without changing the public API.",
+  "chunks": [
+    {"id": "request", "kind": "current_request", "text": "Fix the refresh-token race."},
+    {"id": "constraint", "kind": "constraint", "text": "Do not change the public API."},
+    {"id": "decision", "kind": "decision", "text": "Use a per-user lock."},
+    {"id": "proof", "kind": "evidence", "text": "The concurrency test reproduces the duplicate refresh.", "metadata": {"essential": true}},
+    {"id": "code", "kind": "code", "text": "def refresh(): ...", "source": "app/auth.py:40", "metadata": {"reopenable": true}},
+    {"id": "old", "kind": "draft", "text": "Abandoned implementation...", "metadata": {"superseded": true}}
+  ]
+}
 ```
 
-Exclude the discarded v1/v2 plans, full critiques, and raw benchmark logs.
+Run:
+
+```bash
+token-saver compact --input context.json --output handoff.json --save-handoff
+```
+
+Expected properties:
+
+- The request, constraint, decision, and essential evidence remain.
+- Verified-reopenable code becomes an exact source reference rather than a paraphrase; unverified code remains verbatim.
+- The abandoned draft is absent from `context` and its raw text is never emitted.
+- `status=infeasible` appears if protected content alone exceeds the budget.
+
+## Resume
+
+```bash
+token-saver handoff show
+token-saver artifact show --accepted
+```
+
+Use only the saved handoff, accepted artifact, current request, and newly retrieved evidence. Reopen referenced sources when exact contents are needed.

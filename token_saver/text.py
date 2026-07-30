@@ -4,7 +4,7 @@ import hashlib
 import re
 from collections import Counter
 
-WORD_RE = re.compile(r"[A-Za-z0-9_./:@+-]+")
+WORD_RE = re.compile(r"[A-Za-z0-9]+")
 SPACE_RE = re.compile(r"\s+")
 
 

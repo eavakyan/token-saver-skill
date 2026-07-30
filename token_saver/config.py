@@ -3,11 +3,11 @@ from __future__ import annotations
 import copy
 import os
 import tomllib
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-PACKAGE_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CONFIG = PACKAGE_ROOT / "config" / "default.toml"
+DEFAULT_CONFIG = files("token_saver").joinpath("data/default.toml")
 
 
 def _merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -24,8 +24,11 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
     with DEFAULT_CONFIG.open("rb") as handle:
         config = tomllib.load(handle)
 
-    override_path = Path(path or os.getenv("TOKEN_SAVER_CONFIG", "")).expanduser()
-    if str(override_path) not in {"", "."} and override_path.exists():
+    selected = path or os.getenv("TOKEN_SAVER_CONFIG")
+    if selected:
+        override_path = Path(selected).expanduser()
+        if not override_path.is_file():
+            raise FileNotFoundError(f"Configuration file not found: {override_path}")
         with override_path.open("rb") as handle:
             config = _merge(config, tomllib.load(handle))
     return config

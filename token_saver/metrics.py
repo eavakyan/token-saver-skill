@@ -13,6 +13,8 @@ def compact_metrics(result: CompactResult) -> dict:
         "estimated_tokens_after": result.estimated_tokens_after,
         "estimated_tokens_avoided": avoided,
         "estimated_savings_percent": round(result.savings_ratio * 100, 1),
+        "status": result.status,
+        "minimum_required_tokens": result.minimum_required_tokens,
         "actions": dict(actions),
         "warnings": result.warnings,
     }

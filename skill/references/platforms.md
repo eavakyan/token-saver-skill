@@ -1,75 +1,45 @@
-# Platform Notes
+# Platform and persistence notes
 
-## Canonical skill
+## Execution model
 
-The same `skill/` directory is installed on both platforms. Keep behavior in one `SKILL.md`; keep platform differences in installers and this reference.
-
-## Claude Code
-
-Personal skills:
-
-```text
-~/.claude/skills/token-saver/SKILL.md
-```
-
-Project skills:
-
-```text
-<project>/.claude/skills/token-saver/SKILL.md
-```
-
-Direct invocation:
-
-```text
-/token-saver <task>
-```
-
-Automatic invocation depends on the skill description and model judgment. For consistent lightweight application, add the marked Token Saver shim to global `~/.claude/CLAUDE.md` or project `CLAUDE.md`.
-
-Do not paste the entire skill into `CLAUDE.md`; that would permanently consume context. The shim should remain tiny and point to the skill.
+The skill uses one interface: the installed `token-saver` console command. Verify it with `token-saver doctor`. The skill does not rely on `python`, `python3`, `TOKEN_SAVER_SKILL_DIR`, `CLAUDE_SKILL_DIR`, or a copied package tree.
 
 ## Codex
 
-Personal skills:
+Current user discovery location:
 
 ```text
-~/.codex/skills/token-saver/SKILL.md
+~/.agents/skills/token-saver/SKILL.md
 ```
 
-Project skills:
+Current repository discovery location:
 
 ```text
-<project>/.codex/skills/token-saver/SKILL.md
+<repository>/.agents/skills/token-saver/SKILL.md
 ```
 
-Invoke naturally or through the platform's skill syntax, for example:
+The installer creates a symlink to this repository's canonical `skill/` directory, so committed updates become visible without recopying files:
 
-```text
-Use the token saver skill for this job: <task>
+```bash
+python3 scripts/install.py --platform codex --scope global
 ```
 
-For consistent lightweight application, add the marked Token Saver shim to `~/.codex/AGENTS.md` or the project's root `AGENTS.md`.
+Invoke explicitly with `$token-saver`. The skill disables implicit invocation to avoid spending its full instruction budget on ordinary tasks. Start a new Codex session if a newly installed or updated skill is not visible.
 
-Restart Codex after adding a new skill if the running version does not hot-reload skill discovery.
+## Claude Code
 
-## Always-on shim
+The installer can also create the conventional Claude Code symlink:
 
-The installer writes this compact behavior:
-
-```text
-Apply the token-saver fast path to every task: load only relevant context, preserve constraints/evidence/accepted artifacts, avoid repeated output, and stop when complete. Invoke the full token-saver skill for large, iterative, retrieval-heavy, strict-format, or retry-prone work.
+```bash
+python3 scripts/install.py --platform claude --scope global
 ```
 
-This is intentionally small. Global instructions are loaded frequently; placing the full policy there would undermine the goal.
+Invoke it through the platform's supported skill command.
 
-## Platform limitations
+## Optional instruction shim
 
-A skill can influence but may not control:
+`--always-on` adds only a short conditional instruction to the global or project instruction file. This consumes tokens on every task and remains advisory, so explicit invocation is the recommended default.
 
-- which model a hosted UI selects;
-- internal context compaction;
-- hidden reasoning retention;
-- prompt-cache billing;
-- tool-definition injection.
+## Limits
 
-Use the skill to produce compact source passages, accepted-artifact records, and fresh-task handoffs that the platform can consume.
+A skill can recommend but cannot guarantee model switching, hidden-context deletion, prompt-cache behavior, billing savings, or platform-specific compaction. Validate task quality, total tokens, latency, and cost on representative work.

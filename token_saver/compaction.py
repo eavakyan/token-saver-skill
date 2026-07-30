@@ -7,19 +7,36 @@ from .models import CompactResult, ContextChunk, ScoredChunk
 from .text import compact_whitespace, fingerprint, lexical_relevance, terms
 from .tokenizer import estimate_tokens
 
-HARD_KEEP = {"accepted_artifact", "constraint", "current_request"}
+HARD_KEEP = {"accepted_artifact", "constraint", "current_request", "decision"}
+EXACT_KINDS = {"code", "exact"}
 REFERENCEABLE = {"source_passage", "evidence", "tool_result"}
-LOW_VALUE = {"draft", "critique", "rejected_source", "reasoning"}
 
 SENTENCE_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 
 
-def _uniqueness(text: str, seen: set[str]) -> float:
-    fp = fingerprint(text)
-    if fp in seen:
-        return 0.0
-    seen.add(fp)
-    return 1.0
+def _is_exact(chunk: ContextChunk) -> bool:
+    return chunk.kind in EXACT_KINDS or bool(chunk.metadata.get("exact"))
+
+
+def _is_protected(chunk: ContextChunk) -> bool:
+    return bool(
+        chunk.kind in HARD_KEEP
+        or chunk.accepted
+        or chunk.metadata.get("required")
+        or chunk.metadata.get("essential")
+        or _is_exact(chunk)
+    )
+
+
+def _canonical_indexes(chunks: list[ContextChunk]) -> dict[str, int]:
+    """Prefer a protected copy when identical chunks have different labels."""
+    canonical: dict[str, int] = {}
+    for index, chunk in enumerate(chunks):
+        fp = fingerprint(chunk.text)
+        prior = canonical.get(fp)
+        if prior is None or (_is_protected(chunk) and not _is_protected(chunks[prior])):
+            canonical[fp] = index
+    return canonical
 
 
 def _freshness(chunk: ContextChunk) -> float:
@@ -96,28 +113,33 @@ def compact(
     budget = int(config["context_budget_tokens"])
     threshold = float(config["min_chunk_score"])
     summary_ratio = float(config["summary_ratio"])
-    seen: set[str] = set()
     scored: list[ScoredChunk] = []
+    canonical = _canonical_indexes(chunks)
 
     request_tokens = estimate_tokens(request, chars_per_token)
     before = request_tokens + sum(estimate_tokens(chunk.text, chars_per_token) for chunk in chunks)
 
-    for chunk in chunks:
+    for index, chunk in enumerate(chunks):
         token_before = estimate_tokens(chunk.text, chars_per_token)
-        uniqueness = _uniqueness(chunk.text, seen)
-        relevance = 1.0 if chunk.kind in HARD_KEEP else lexical_relevance(request, chunk.text)
+        uniqueness = 1.0 if canonical[fingerprint(chunk.text)] == index else 0.0
+        protected = _is_protected(chunk)
+        exact = _is_exact(chunk)
+        relevance = 1.0 if protected else lexical_relevance(request, chunk.text)
         weight = float(weights.get(chunk.kind, weights.get("unknown", 0.45)))
         score = weight * relevance * _freshness(chunk) * _authority(chunk) * uniqueness * _dependency(chunk)
 
-        if chunk.kind in HARD_KEEP or chunk.metadata.get("required"):
-            action = "keep"
-            reason = "hard-preserved task contract or accepted work"
-        elif uniqueness == 0.0:
+        if uniqueness == 0.0:
             action = "discard"
-            reason = "exact duplicate"
+            reason = "exact duplicate; canonical copy retained"
         elif chunk.metadata.get("superseded") or chunk.metadata.get("rejected"):
             action = "discard"
             reason = "superseded or rejected"
+        elif exact and chunk.source and chunk.metadata.get("reopenable") is True:
+            action = "reference"
+            reason = "exact content preserved by verified reopenable source reference"
+        elif protected:
+            action = "keep"
+            reason = "protected constraint, decision, accepted work, essential evidence, or exact content; unverified sources are not substituted"
         elif score < threshold:
             action = "discard"
             reason = f"ROI score {score:.3f} below {threshold:.3f}"
@@ -133,7 +155,7 @@ def compact(
 
         output_text: str | None
         if action == "keep":
-            output_text = compact_whitespace(chunk.text)
+            output_text = chunk.text if exact else compact_whitespace(chunk.text)
         elif action == "compress":
             target = max(240, int(len(chunk.text) * summary_ratio))
             output_text = _summarize(chunk.text, request, target)
@@ -153,11 +175,17 @@ def compact(
             output_text=output_text,
         ))
 
-    # Enforce budget by demoting the lowest-value non-hard-kept chunks.
+    minimum_required = request_tokens + sum(
+        item.estimated_tokens_after
+        for item in scored
+        if _is_protected(item.chunk) and item.action != "discard"
+    )
+
+    # Enforce the budget only by demoting material that is safe to reopen or drop.
     current = request_tokens + sum(item.estimated_tokens_after for item in scored)
     if current > budget:
         candidates = sorted(
-            (item for item in scored if item.chunk.kind not in HARD_KEEP and item.action != "discard"),
+            (item for item in scored if not _is_protected(item.chunk) and item.action != "discard"),
             key=lambda item: item.score,
         )
         for item in candidates:
@@ -176,6 +204,13 @@ def compact(
             current -= old - item.estimated_tokens_after
 
     warnings = []
+    status = "ok"
+    if current > budget:
+        status = "infeasible"
+        warnings.append(
+            f"Context budget infeasible without dropping protected content: "
+            f"minimum {minimum_required} tokens exceeds budget {budget}."
+        )
     ratio = current / max(1, budget)
     if ratio >= float(config["fresh_task_ratio"]):
         warnings.append("Fresh-task threshold reached: continue with only the task contract, accepted artifact, decisions, open issues, and essential evidence.")
@@ -190,6 +225,8 @@ def compact(
         budget_tokens=budget,
         estimated_tokens_before=before,
         estimated_tokens_after=current,
+        minimum_required_tokens=minimum_required,
         chunks=scored,
+        status=status,
         warnings=warnings,
     )

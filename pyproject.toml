@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-token-saver"
-version = "1.0.0"
+version = "1.1.0"
 description = "Cross-platform Agent Skill and deterministic toolkit for reducing context tokens without blindly sacrificing quality."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,3 +21,6 @@ token-saver = "token_saver.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["token_saver*"]
+
+[tool.setuptools.package-data]
+token_saver = ["data/*.toml"]

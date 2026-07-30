@@ -4,11 +4,16 @@ state_dir = ".token-saver"
 [common]
 chars_per_token = 4.0
 max_file_bytes = 1000000
+max_preview_bytes = 65536
+max_files_scanned = 4000
+max_total_bytes_scanned = 33554432
 max_passage_chars = 1800
 passage_context_lines = 4
 max_retries_same_signature = 2
+retry_ttl_seconds = 86400
 exclude_dirs = [".git", ".hg", ".svn", "node_modules", "vendor", "dist", "build", ".next", ".cache", ".venv", "venv", "__pycache__", ".token-saver"]
-exclude_files = [".env", ".env.local", ".env.production", "id_rsa", "id_ed25519"]
+exclude_files = [".env", ".env.local", ".env.production", ".npmrc", ".pypirc", ".netrc", "id_rsa", "id_ed25519", "credentials.json"]
+exclude_globs = [".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "*.jks", "*.keystore", "*.kdbx", "credentials.*.json", "service-account*.json", "*.secrets.*"]
 allowed_extensions = [".md", ".txt", ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rs", ".rb", ".php", ".c", ".h", ".cpp", ".hpp", ".cs", ".swift", ".kt", ".kts", ".scala", ".sh", ".bash", ".zsh", ".fish", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".sql", ".graphql", ".html", ".css", ".scss", ".xml", ".csv"]
 
 [modes.quality-first]
@@ -50,6 +55,8 @@ constraint = 0.98
 current_request = 0.98
 decision = 0.90
 evidence = 0.86
+exact = 0.98
+code = 0.90
 source_passage = 0.82
 tool_result = 0.55
 summary = 0.70

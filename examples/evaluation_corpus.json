@@ -1,0 +1,95 @@
+{
+  "cases": [
+    {
+      "name": "cross-file-auth-debug-handoff",
+      "mode": "balanced",
+      "request": "Fix the refresh-token race without changing the public API and retain the concurrency proof.",
+      "chunks": [
+        {
+          "id": "request",
+          "kind": "current_request",
+          "text": "Fix the refresh-token race and verify the correction."
+        },
+        {
+          "id": "constraint",
+          "kind": "constraint",
+          "text": "Do not change the public API or rotate credentials."
+        },
+        {
+          "id": "decision",
+          "kind": "decision",
+          "text": "Use a per-user lock and preserve the existing response schema."
+        },
+        {
+          "id": "proof",
+          "kind": "evidence",
+          "text": "The 40-worker concurrency test reproduces duplicate refresh writes before the patch and passes after it.",
+          "metadata": {"essential": true}
+        },
+        {
+          "id": "code",
+          "kind": "code",
+          "text": "async def refresh_token(user_id):\n    async with lock_for(user_id):\n        return await rotate_once(user_id)",
+          "source": "app/auth/refresh.py:42"
+        },
+        {
+          "id": "old-draft",
+          "kind": "draft",
+          "text": "ABANDONED-RAW-DRAFT-MARKER The first attempt used a global lock. This paragraph is intentionally repetitive and should not survive into the handoff. The first attempt used a global lock. This paragraph is intentionally repetitive and should not survive into the handoff.",
+          "metadata": {"superseded": true}
+        }
+      ],
+      "must_preserve_ids": ["request", "constraint", "decision", "proof", "code"],
+      "must_discard_ids": ["old-draft"],
+      "raw_text_must_not_appear": ["ABANDONED-RAW-DRAFT-MARKER"],
+      "expected_status": "ok"
+    },
+    {
+      "name": "security-review-with-unrelated-tool-noise",
+      "mode": "quality-first",
+      "request": "Prepare the smallest evidence-backed handoff for the authorization review.",
+      "chunks": [
+        {
+          "id": "authorization-boundary",
+          "kind": "constraint",
+          "text": "Do not change credentials or production access while reviewing authorization."
+        },
+        {
+          "id": "review-decision",
+          "kind": "decision",
+          "text": "Ownership checks must fail closed before any record is returned."
+        },
+        {
+          "id": "verified-test",
+          "kind": "evidence",
+          "text": "A request from a different account returns not found and does not disclose record metadata.",
+          "metadata": {"essential": true, "verified": true}
+        },
+        {
+          "id": "terminal-noise",
+          "kind": "tool_result",
+          "text": "UNRELATED-TERMINAL-NOISE package cache listing package cache listing package cache listing package cache listing package cache listing package cache listing package cache listing package cache listing"
+        }
+      ],
+      "must_preserve_ids": ["authorization-boundary", "review-decision", "verified-test"],
+      "must_discard_ids": ["terminal-noise"],
+      "raw_text_must_not_appear": ["UNRELATED-TERMINAL-NOISE"],
+      "expected_status": "ok"
+    },
+    {
+      "name": "protected-content-over-budget",
+      "mode": "extreme",
+      "policy_overrides": {"context_budget_tokens": 12},
+      "request": "Preserve the release gate.",
+      "chunks": [
+        {
+          "id": "release-gate",
+          "kind": "constraint",
+          "text": "Do not release until the migration rollback, restore drill, concurrency test, and authorization denial test all pass with recorded evidence."
+        }
+      ],
+      "must_preserve_ids": ["release-gate"],
+      "expected_status": "infeasible"
+    }
+  ]
+}
