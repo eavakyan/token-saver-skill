@@ -152,6 +152,8 @@ Token Saver request report
 - provider usage/cost: <reported values, or unavailable>
 ```
 
+Delivery rule: place this report in the same final user-facing response that completes the request. It must be the terminal section of that response, after the normal summary; do not emit it only in commentary, a tool result, a local log, or a later follow-up. Include it even when no Token Saver CLI command ran, using the `not recorded` status below.
+
 Clearly label character-based or model-tokenizer values as estimates. Never present them as provider billing data. If no Token Saver command ran, report `not recorded: no retrieval or compaction operation was needed`.
 
 ### 9. Stop
