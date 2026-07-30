@@ -21,7 +21,7 @@ from .output_guard import validate_output
 from .retrieval import retrieve_with_stats
 from .retry_guard import RetryGuard
 from .router import recommend_tier
-from .state import HandoffStore
+from .state import HandoffStore, RunStore
 
 
 def _json_dump(value) -> None:
@@ -127,13 +127,24 @@ def cmd_retrieve(args) -> int:
         args.passages_per_file,
         args.context_lines,
     )
-    _json_dump({
+    output = {
         "query": args.query,
         "root": str(Path(args.root).resolve()),
         "mode": mode,
         "stats": result.stats.to_dict(),
         "passages": [passage.to_dict() for passage in result.passages],
-    })
+    }
+    if not args.no_record:
+        run = RunStore(_state_dir(config)).record(
+            _state_scope(args.state_scope),
+            "retrieve",
+            {"mode": mode, "status": "ok"},
+            metadata={"stats": result.stats.to_dict(), "passages_returned": len(result.passages)},
+        )
+        output["run"] = {"id": run["id"], "recorded": True}
+    else:
+        output["run"] = {"recorded": False}
+    _json_dump(output)
     return 0
 
 
@@ -142,11 +153,31 @@ def cmd_compact(args) -> int:
     config = load_config(args.config)
     mode, policy = resolve_mode(config, args.mode or payload.get("mode"))
     chunks = [ContextChunk(**item) for item in payload.get("chunks", [])]
-    result = compact(payload.get("request", ""), chunks, policy, mode, config["weights"])
+    result = compact(
+        payload.get("request", ""),
+        chunks,
+        policy,
+        mode,
+        config["weights"],
+        model=args.model or payload.get("model"),
+    )
     output = result.to_dict()
     output["metrics"] = compact_metrics(result)
     if args.metrics_line:
         output["metrics_line"] = metric_line(result)
+    if not args.no_record:
+        run = RunStore(_state_dir(config)).record(
+            _state_scope(args.state_scope),
+            "compact",
+            output["metrics"],
+            model=result.model,
+            tokenizer=result.tokenizer,
+            metadata={"chunks": len(chunks)},
+        )
+        output["run"] = {"id": run["id"], "recorded": True}
+        output["metrics"]["run_id"] = run["id"]
+    else:
+        output["run"] = {"recorded": False}
     if args.save_handoff:
         saved = HandoffStore(_state_dir(config)).save(_state_scope(args.state_scope), output)
         output["handoff"] = {"scope": saved["scope"], "updated_at": saved["updated_at"]}
@@ -229,6 +260,55 @@ def cmd_handoff(args) -> int:
     return 0
 
 
+def _provider_usage(payload: dict) -> dict:
+    source = payload.get("provider_usage", payload)
+    if not isinstance(source, dict):
+        raise ValueError("provider_usage must be a JSON object")
+    allowed = {"provider", "model", "input_tokens", "output_tokens", "cached_input_tokens", "total_tokens", "cost_usd"}
+    return {
+        key: source[key]
+        for key in allowed
+        if key in source and isinstance(source[key], (str, int, float)) and not isinstance(source[key], bool)
+    }
+
+
+def cmd_metrics(args) -> int:
+    config = load_config(args.config)
+    scope = _state_scope(args.state_scope)
+    store = RunStore(_state_dir(config))
+    if args.metrics_command == "summary":
+        _json_dump(store.summary(scope))
+        return 0
+    if args.metrics_command == "show":
+        value = store.show(args.id, scope)
+        if value is None:
+            _json_dump({"scope": scope, "found": False, "id": args.id})
+            return 1
+        _json_dump(value)
+        return 0
+    if args.metrics_command == "export":
+        encoded = store.export_jsonl(scope)
+        if args.output:
+            _write_text_atomic(args.output, encoded)
+        else:
+            print(encoded, end="")
+        return 0
+
+    payload = _read_input(args.input)
+    usage = _provider_usage(payload)
+    metadata = {"linked_run_id": payload["linked_run_id"]} if payload.get("linked_run_id") else {}
+    run = store.record(
+        scope,
+        "provider_usage",
+        {"status": "reported"},
+        model=usage.get("model"),
+        provider_usage=usage,
+        metadata=metadata,
+    )
+    _json_dump(run)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="token-saver", description="Reduce agent context tokens without blindly sacrificing quality.")
     parser.add_argument("--config", help="Optional TOML override; missing paths fail closed.")
@@ -251,6 +331,7 @@ def build_parser() -> argparse.ArgumentParser:
     retrieval.add_argument("--top-files", type=int)
     retrieval.add_argument("--passages-per-file", type=int)
     retrieval.add_argument("--context-lines", type=int, help="Expand a promising hit without changing the query.")
+    retrieval.add_argument("--no-record", action="store_true", help="Do not append local run telemetry.")
     retrieval.set_defaults(func=cmd_retrieve)
 
     comp = sub.add_parser("compact", help="Build a safe compact handoff from a JSON context bundle.")
@@ -258,6 +339,8 @@ def build_parser() -> argparse.ArgumentParser:
     comp.add_argument("--output")
     comp.add_argument("--metrics-line", action="store_true")
     comp.add_argument("--save-handoff", action="store_true")
+    comp.add_argument("--model", help="Optional model name for tiktoken-based estimates when available.")
+    comp.add_argument("--no-record", action="store_true", help="Do not append local run telemetry.")
     comp.set_defaults(func=cmd_compact)
 
     val = sub.add_parser("validate-output", help="Validate output constraints.")
@@ -305,6 +388,20 @@ def build_parser() -> argparse.ArgumentParser:
     handoff_show.set_defaults(func=cmd_handoff)
     handoff_clear = handoff_sub.add_parser("clear")
     handoff_clear.set_defaults(func=cmd_handoff)
+
+    metrics = sub.add_parser("metrics", help="Inspect append-only Token Saver run telemetry.")
+    metrics_sub = metrics.add_subparsers(dest="metrics_command", required=True)
+    metrics_summary = metrics_sub.add_parser("summary")
+    metrics_summary.set_defaults(func=cmd_metrics)
+    metrics_show = metrics_sub.add_parser("show")
+    metrics_show.add_argument("id")
+    metrics_show.set_defaults(func=cmd_metrics)
+    metrics_export = metrics_sub.add_parser("export")
+    metrics_export.add_argument("--output")
+    metrics_export.set_defaults(func=cmd_metrics)
+    metrics_record = metrics_sub.add_parser("record", help="Record provider usage metadata supplied by the caller.")
+    metrics_record.add_argument("--input", required=True, help="Provider usage JSON path or - for stdin.")
+    metrics_record.set_defaults(func=cmd_metrics)
 
     return parser
 

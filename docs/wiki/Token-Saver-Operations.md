@@ -30,6 +30,8 @@ python3 scripts/install.py --platform codex --scope global
 ```bash
 token-saver retrieve --root . --query "specific search terms"
 token-saver compact --input context.json --output handoff.json --save-handoff
+token-saver metrics summary
+token-saver metrics export --output token-saver-runs.jsonl
 token-saver handoff show
 token-saver artifact add plan.md --label "plan"
 token-saver retry-check --operation "command" --error "failure" --input-hash "hash" --strategy "strategy"
@@ -56,5 +58,7 @@ token-saver validate-output answer.json --json
 - Exact content is referenced only when its source is verified as reopenable.
 - Protected content over budget returns an explicit infeasible status.
 - Repository state uses concurrency-safe SQLite transactions and repository/branch scoping.
+- Retrieval and compaction append derived run telemetry by default; use `--no-record` to opt out.
+- The skill appends a `Token Saver request report` after its normal task summary when invoked.
 
 For complete commands and examples, see the [README](https://github.com/eavakyan/token-saver-skill#readme).

@@ -124,7 +124,37 @@ A nonzero exit means stop or materially change the evidence, input, hypothesis, 
 
 Use `token-saver validate-output` for exact word counts, bullet counts, headings, or JSON parseability. Trim repetition, introductions, generic reassurance, and optional background before removing evidence or caveats.
 
-### 8. Stop
+### 8. Record and report the request
+
+`compact` and `retrieve` append a privacy-preserving local run record by default. The record contains derived counts, actions, warnings, scan statistics, fingerprints, and optional caller-supplied provider usage; it never stores raw requests, context chunks, discarded text, secrets, or credentials. Use `--no-record` only when local telemetry is not appropriate.
+
+Inspect or export the local history with:
+
+```bash
+token-saver metrics summary
+token-saver metrics show <run-id>
+token-saver metrics export --output token-saver-runs.jsonl
+```
+
+If the platform or API supplies actual usage metadata, record only the aggregate fields:
+
+```bash
+token-saver metrics record --input provider-usage.json
+```
+
+After the normal user-facing task summary, append this report as the final section of every request where Token Saver is invoked:
+
+```text
+Token Saver request report
+- run: <run id, or not recorded>
+- estimated input: <before> -> <after>; avoided: <count> (<percent>)
+- quality/status: <status and any material warning>
+- provider usage/cost: <reported values, or unavailable>
+```
+
+Clearly label character-based or model-tokenizer values as estimates. Never present them as provider billing data. If no Token Saver command ran, report `not recorded: no retrieval or compaction operation was needed`.
+
+### 9. Stop
 
 Finish when the deliverable passes its acceptance test and another tool call or paragraph would not materially improve it.
 
