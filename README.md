@@ -40,7 +40,7 @@ See the [project wiki](https://github.com/eavakyan/token-saver-skill/wiki) for a
 For an isolated, persistent macOS/Linux install whose launcher is on the standard user PATH:
 
 ```bash
-cd /Users/gene/dev/general_system_work/token-saver
+cd /Users/<username>/<development-directory>/general_system_work/token-saver
 python3 -m venv ~/.local/share/token-saver/venv
 ~/.local/share/token-saver/venv/bin/python -m pip install --no-deps .
 ln -s ~/.local/share/token-saver/venv/bin/token-saver ~/.local/bin/token-saver
@@ -68,14 +68,14 @@ The skill itself invokes only the `token-saver` console command. It does not dep
 After `token-saver doctor` succeeds:
 
 ```bash
-cd /Users/gene/dev/general_system_work/token-saver
+cd /Users/<username>/<development-directory>/general_system_work/token-saver
 python3 scripts/install.py --platform codex --scope global
 ```
 
 This creates:
 
 ```text
-~/.agents/skills/token-saver -> /Users/gene/dev/general_system_work/token-saver/skill
+~/.agents/skills/token-saver -> /Users/<username>/<development-directory>/general_system_work/token-saver/skill
 ```
 
 The symlink keeps the repository as the canonical source. The installer is idempotent when the correct link already exists. With `--force`, an existing target is moved to a timestamped backup rather than deleted.
