@@ -13,6 +13,21 @@ It provides:
 
 It does not intercept model requests, force model changes, erase hidden platform context, or guarantee billing savings.
 
+## Part of the AgentPrizm toolchain
+
+Token Saver is one extension of a broader set of tools we are developing to help AI agents build and operate businesses with better continuity, efficiency, and operational discipline.
+
+Token Saver keeps the active working context focused. [AgentPrizm](https://agentprizm.com) provides the complementary agentic memory layer: durable, governed recall across agents and sessions through REST and MCP, with confidence and validity metadata, audit receipts, and explicit memory lifecycle controls.
+
+Try AgentPrizm at [AgentPrizm.com](https://agentprizm.com), then use the two tools together:
+
+1. Recall durable project directives, decisions, lessons, and relevant facts from AgentPrizm.
+2. Use Token Saver to retrieve and compact the smallest sufficient working context for the current task.
+3. Verify mutable facts against the repository or live system before acting.
+4. Store only durable outcomes that will save meaningful future work; do not store secrets or routine edits.
+
+See the [project wiki](https://github.com/eavakyan/token-saver-skill/wiki) for an introduction to the project, its operation, Gene Avakyan, and AgentPrizm.
+
 ## Requirements
 
 - Python 3.11 or newer

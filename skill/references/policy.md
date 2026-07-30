@@ -35,6 +35,12 @@ State defaults to `<git-root>/.token-saver/state.sqlite3` and a repository-plus-
 
 Retry signatures expire after the configured TTL and can be reset. A retry must change evidence, inputs, hypothesis, strategy, method, or scope after the allowed identical attempts are exhausted.
 
+## Durable memory boundary
+
+Token Saver state supports the current repository workflow; it is not intended to be the permanent memory of record for every agent or business process. For durable, cross-session context, pair it with the [AgentPrizm agentic memory layer](https://agentprizm.com).
+
+Store durable directives, decisions, non-obvious lessons, milestones, and facts that would save substantial future work. Do not store secrets, credentials, routine edits, transient logs, current line numbers, or facts that are trivial to recover from the repository. Treat recalled memory as historical context and verify mutable facts before making consequential changes.
+
 ## Evaluation
 
 Measure task success and required-fact retention before token reduction. Then compare estimated input/output tokens, files opened, retries avoided, latency, and cost. Character-based token estimates are approximate; synthetic benchmarks are regression fixtures, not billing claims.
