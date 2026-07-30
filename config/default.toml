@@ -1,0 +1,60 @@
+default_mode = "balanced"
+state_dir = ".token-saver"
+
+[common]
+chars_per_token = 4.0
+max_file_bytes = 1000000
+max_passage_chars = 1800
+passage_context_lines = 4
+max_retries_same_signature = 2
+exclude_dirs = [".git", ".hg", ".svn", "node_modules", "vendor", "dist", "build", ".next", ".cache", ".venv", "venv", "__pycache__", ".token-saver"]
+exclude_files = [".env", ".env.local", ".env.production", "id_rsa", "id_ed25519"]
+allowed_extensions = [".md", ".txt", ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rs", ".rb", ".php", ".c", ".h", ".cpp", ".hpp", ".cs", ".swift", ".kt", ".kts", ".scala", ".sh", ".bash", ".zsh", ".fish", ".json", ".jsonl", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".sql", ".graphql", ".html", ".css", ".scss", ".xml", ".csv"]
+
+[modes.quality-first]
+context_budget_tokens = 48000
+warn_ratio = 0.55
+compact_ratio = 0.72
+fresh_task_ratio = 0.90
+min_chunk_score = 0.22
+summary_ratio = 0.55
+top_files = 14
+passages_per_file = 5
+default_output_words = 900
+
+[modes.balanced]
+context_budget_tokens = 28000
+warn_ratio = 0.40
+compact_ratio = 0.60
+fresh_task_ratio = 0.80
+min_chunk_score = 0.35
+summary_ratio = 0.35
+top_files = 8
+passages_per_file = 3
+default_output_words = 500
+
+[modes.extreme]
+context_budget_tokens = 14000
+warn_ratio = 0.30
+compact_ratio = 0.48
+fresh_task_ratio = 0.68
+min_chunk_score = 0.50
+summary_ratio = 0.20
+top_files = 5
+passages_per_file = 2
+default_output_words = 250
+
+[weights]
+accepted_artifact = 1.00
+constraint = 0.98
+current_request = 0.98
+decision = 0.90
+evidence = 0.86
+source_passage = 0.82
+tool_result = 0.55
+summary = 0.70
+draft = 0.25
+critique = 0.30
+rejected_source = 0.05
+reasoning = 0.05
+unknown = 0.45

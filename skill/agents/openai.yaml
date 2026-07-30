@@ -1,0 +1,4 @@
+interface:
+  display_name: "Token Saver"
+  short_description: "Reduce context tokens while preserving required quality."
+  default_prompt: "Use $token-saver to complete this task with the smallest sufficient context, preserve required evidence and constraints, and validate the output contract."
