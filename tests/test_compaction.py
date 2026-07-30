@@ -74,6 +74,19 @@ class CompactionTests(unittest.TestCase):
         self.assertGreater(result.estimated_tokens_after, result.budget_tokens)
         self.assertTrue(any("infeasible" in warning.lower() for warning in result.warnings))
 
+    def test_model_estimator_is_recorded_with_safe_fallback(self):
+        result = compact(
+            "Fix auth",
+            [ContextChunk(id="evidence", kind="evidence", text="The test fails.")],
+            self.policy,
+            self.mode,
+            self.config["weights"],
+            model="gpt-5",
+        )
+        self.assertEqual(result.model, "gpt-5")
+        self.assertTrue(result.tokenizer.startswith(("tiktoken:", "chars/")))
+        self.assertEqual(result.to_dict()["model"], "gpt-5")
+
 
 if __name__ == "__main__":
     unittest.main()

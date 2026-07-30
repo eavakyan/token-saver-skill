@@ -33,6 +33,8 @@ Normal compact output contains the selected handoff content plus fingerprints an
 
 State defaults to `<git-root>/.token-saver/state.sqlite3` and a repository-plus-branch scope. SQLite transactions protect concurrent artifact acceptance, retry counters, and handoff replacement. Use an explicit shared `--state-scope` only when agents intentionally coordinate.
 
+Token Saver also keeps append-only run telemetry for retrieval and compaction. Telemetry is limited to derived metrics, fingerprints, scan statistics, warnings, and explicitly supplied aggregate provider usage. It must never contain raw requests, context chunks, discarded text, secrets, or credentials. Use `--no-record` when local recording is inappropriate.
+
 Retry signatures expire after the configured TTL and can be reset. A retry must change evidence, inputs, hypothesis, strategy, method, or scope after the allowed identical attempts are exhausted.
 
 ## Durable memory boundary

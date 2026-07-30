@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -37,6 +38,26 @@ CREATE TABLE IF NOT EXISTS handoffs (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS runs (
+    id TEXT PRIMARY KEY,
+    scope TEXT NOT NULL,
+    command TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    mode TEXT,
+    model TEXT,
+    tokenizer TEXT,
+    status TEXT,
+    estimated_tokens_before INTEGER,
+    estimated_tokens_after INTEGER,
+    estimated_tokens_avoided INTEGER,
+    estimated_savings_percent REAL,
+    minimum_required_tokens INTEGER,
+    actions_json TEXT NOT NULL,
+    warnings_json TEXT NOT NULL,
+    provider_usage_json TEXT,
+    metadata_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS runs_scope_created ON runs(scope, created_at);
 """
 
 
@@ -118,3 +139,160 @@ class HandoffStore:
         with self.db.transaction() as connection:
             cursor = connection.execute("DELETE FROM handoffs WHERE scope=?", (scope,))
         return bool(cursor.rowcount)
+
+
+class RunStore:
+    """Append-only local telemetry for Token Saver operations.
+
+    Only derived metrics and caller-supplied usage metadata are persisted. Raw
+    requests, context chunks, and discarded text are intentionally excluded.
+    """
+
+    def __init__(self, state_dir: str | Path):
+        self.db = StateDB(state_dir)
+
+    def record(
+        self,
+        scope: str,
+        command: str,
+        metrics: dict[str, Any] | None = None,
+        *,
+        model: str | None = None,
+        tokenizer: str | None = None,
+        provider_usage: dict[str, Any] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        metrics = metrics or {}
+        run_id = uuid.uuid4().hex
+        created_at = int(time.time())
+        record = {
+            "id": run_id,
+            "scope": scope,
+            "command": command,
+            "created_at": created_at,
+            "mode": metrics.get("mode"),
+            "model": model,
+            "tokenizer": tokenizer,
+            "status": metrics.get("status"),
+            "estimated_tokens_before": metrics.get("estimated_tokens_before"),
+            "estimated_tokens_after": metrics.get("estimated_tokens_after"),
+            "estimated_tokens_avoided": metrics.get("estimated_tokens_avoided"),
+            "estimated_savings_percent": metrics.get("estimated_savings_percent"),
+            "minimum_required_tokens": metrics.get("minimum_required_tokens"),
+            "actions": metrics.get("actions", {}),
+            "warnings": metrics.get("warnings", []),
+            "provider_usage": provider_usage,
+            "metadata": metadata or {},
+        }
+        with self.db.transaction() as connection:
+            connection.execute(
+                """
+                INSERT INTO runs(
+                    id, scope, command, created_at, mode, model, tokenizer,
+                    status, estimated_tokens_before, estimated_tokens_after,
+                    estimated_tokens_avoided, estimated_savings_percent,
+                    minimum_required_tokens, actions_json, warnings_json,
+                    provider_usage_json, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id, scope, command, created_at, record["mode"], model,
+                    tokenizer, record["status"], record["estimated_tokens_before"],
+                    record["estimated_tokens_after"], record["estimated_tokens_avoided"],
+                    record["estimated_savings_percent"], record["minimum_required_tokens"],
+                    json.dumps(record["actions"], sort_keys=True),
+                    json.dumps(record["warnings"], ensure_ascii=False),
+                    json.dumps(provider_usage, sort_keys=True) if provider_usage is not None else None,
+                    json.dumps(record["metadata"], sort_keys=True),
+                ),
+            )
+        return record
+
+    @staticmethod
+    def _decode(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "id": row["id"],
+            "scope": row["scope"],
+            "command": row["command"],
+            "created_at": row["created_at"],
+            "mode": row["mode"],
+            "model": row["model"],
+            "tokenizer": row["tokenizer"],
+            "status": row["status"],
+            "estimated_tokens_before": row["estimated_tokens_before"],
+            "estimated_tokens_after": row["estimated_tokens_after"],
+            "estimated_tokens_avoided": row["estimated_tokens_avoided"],
+            "estimated_savings_percent": row["estimated_savings_percent"],
+            "minimum_required_tokens": row["minimum_required_tokens"],
+            "actions": json.loads(row["actions_json"]),
+            "warnings": json.loads(row["warnings_json"]),
+            "provider_usage": json.loads(row["provider_usage_json"]) if row["provider_usage_json"] else None,
+            "metadata": json.loads(row["metadata_json"]),
+        }
+
+    def list(self, scope: str, limit: int = 20) -> list[dict[str, Any]]:
+        limit = max(1, min(int(limit), 1000))
+        connection = self.db.connect()
+        try:
+            rows = connection.execute(
+                "SELECT * FROM runs WHERE scope=? ORDER BY created_at DESC, id DESC LIMIT ?",
+                (scope, limit),
+            ).fetchall()
+        finally:
+            connection.close()
+        return [self._decode(row) for row in rows]
+
+    def show(self, run_id: str, scope: str | None = None) -> dict[str, Any] | None:
+        connection = self.db.connect()
+        try:
+            if scope:
+                row = connection.execute("SELECT * FROM runs WHERE id=? AND scope=?", (run_id, scope)).fetchone()
+            else:
+                row = connection.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+        finally:
+            connection.close()
+        return self._decode(row) if row else None
+
+    def summary(self, scope: str) -> dict[str, Any]:
+        connection = self.db.connect()
+        try:
+            rows = connection.execute("SELECT * FROM runs WHERE scope=? ORDER BY created_at ASC, id ASC", (scope,)).fetchall()
+        finally:
+            connection.close()
+        records = [self._decode(row) for row in rows]
+        before = sum(record["estimated_tokens_before"] or 0 for record in records)
+        after = sum(record["estimated_tokens_after"] or 0 for record in records)
+        avoided = max(0, before - after)
+        statuses: dict[str, int] = {}
+        actions: dict[str, int] = {}
+        provider_totals: dict[str, float] = {}
+        for record in records:
+            statuses[record["status"] or "unknown"] = statuses.get(record["status"] or "unknown", 0) + 1
+            for action, count in record["actions"].items():
+                actions[action] = actions.get(action, 0) + int(count)
+            if record["provider_usage"]:
+                for key in ("input_tokens", "output_tokens", "cached_input_tokens", "total_tokens", "cost_usd"):
+                    value = record["provider_usage"].get(key)
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        provider_totals[key] = provider_totals.get(key, 0) + value
+        return {
+            "scope": scope,
+            "runs": len(records),
+            "compaction_runs": sum(record["command"] == "compact" for record in records),
+            "estimated_tokens_before": before,
+            "estimated_tokens_after": after,
+            "estimated_tokens_avoided": avoided,
+            "estimated_savings_percent": round(avoided / before * 100, 1) if before else 0.0,
+            "statuses": statuses,
+            "actions": actions,
+            "provider_usage_available": any(record["provider_usage"] is not None for record in records),
+            "provider_usage_totals": provider_totals,
+        }
+
+    def export_jsonl(self, scope: str) -> str:
+        connection = self.db.connect()
+        try:
+            rows = connection.execute("SELECT * FROM runs WHERE scope=? ORDER BY created_at ASC, id ASC", (scope,)).fetchall()
+        finally:
+            connection.close()
+        return "".join(json.dumps(self._decode(row), ensure_ascii=False, sort_keys=True) + "\n" for row in rows)

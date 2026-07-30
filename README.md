@@ -7,6 +7,7 @@ It provides:
 - bounded, ignore-aware source retrieval;
 - safe context handoffs that preserve constraints, decisions, exact content, and essential evidence;
 - concurrency-safe artifact, retry, and handoff state;
+- append-only local run telemetry and request-level metrics reports;
 - output-contract validation;
 - advisory model routing;
 - representative quality-and-reduction regression fixtures.
@@ -138,6 +139,24 @@ Run:
 ```bash
 token-saver compact --input context.json --output handoff.json --save-handoff
 ```
+
+Compaction records derived run metrics by default. Add `--no-record` when local telemetry is not appropriate. The output includes a run ID, estimated input tokens before/after, avoided tokens, savings percentage, actions, tokenizer used, status, and warnings. No raw request or context text is written to telemetry.
+
+Review the local append-only history:
+
+```bash
+token-saver metrics summary
+token-saver metrics show <run-id>
+token-saver metrics export --output token-saver-runs.jsonl
+```
+
+Provider/API usage is not visible to the skill automatically. If the platform supplies aggregate usage metadata, it can be recorded separately without storing prompt content:
+
+```bash
+token-saver metrics record --input provider-usage.json
+```
+
+When `$token-saver` is invoked, the agent should append a `Token Saver request report` after its normal task summary. Estimated counts must remain labeled as estimates; provider usage and billing must be labeled unavailable unless supplied by the platform or caller.
 
 The output contains selected handoff content and compact decision metadata, never the original raw body of discarded chunks. Exact content becomes a reference only when `metadata.reopenable=true` confirms that its source was verified. `status=infeasible` and exit code `4` mean protected material alone exceeds the budget; narrow the task or raise the budget instead of dropping required facts.
 

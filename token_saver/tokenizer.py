@@ -24,3 +24,10 @@ def estimate_tokens(text: str, chars_per_token: float = 4.0, model: str | None =
         if encoder is not None:
             return len(encoder.encode(text))
     return max(1, math.ceil(len(text) / max(chars_per_token, 1.0)))
+
+
+def tokenizer_label(chars_per_token: float = 4.0, model: str | None = None) -> str:
+    """Return the estimator used, without claiming provider billing accuracy."""
+    if model and _get_encoder(model) is not None:
+        return f"tiktoken:{model}"
+    return f"chars/{max(chars_per_token, 1.0):g}"

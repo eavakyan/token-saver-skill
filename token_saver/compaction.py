@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from .models import CompactResult, ContextChunk, ScoredChunk
 from .text import compact_whitespace, fingerprint, lexical_relevance, terms
-from .tokenizer import estimate_tokens
+from .tokenizer import estimate_tokens, tokenizer_label
 
 HARD_KEEP = {"accepted_artifact", "constraint", "current_request", "decision"}
 EXACT_KINDS = {"code", "exact"}
@@ -108,19 +108,21 @@ def compact(
     config: dict,
     mode_name: str,
     weights: dict[str, float],
+    model: str | None = None,
 ) -> CompactResult:
     chars_per_token = float(config["chars_per_token"])
+    estimate = lambda text: estimate_tokens(text, chars_per_token, model)
     budget = int(config["context_budget_tokens"])
     threshold = float(config["min_chunk_score"])
     summary_ratio = float(config["summary_ratio"])
     scored: list[ScoredChunk] = []
     canonical = _canonical_indexes(chunks)
 
-    request_tokens = estimate_tokens(request, chars_per_token)
-    before = request_tokens + sum(estimate_tokens(chunk.text, chars_per_token) for chunk in chunks)
+    request_tokens = estimate(request)
+    before = request_tokens + sum(estimate(chunk.text) for chunk in chunks)
 
     for index, chunk in enumerate(chunks):
-        token_before = estimate_tokens(chunk.text, chars_per_token)
+        token_before = estimate(chunk.text)
         uniqueness = 1.0 if canonical[fingerprint(chunk.text)] == index else 0.0
         protected = _is_protected(chunk)
         exact = _is_exact(chunk)
@@ -164,7 +166,7 @@ def compact(
         else:
             output_text = None
 
-        token_after = estimate_tokens(output_text or "", chars_per_token)
+        token_after = estimate(output_text or "")
         scored.append(ScoredChunk(
             chunk=chunk,
             score=round(score, 4),
@@ -200,7 +202,7 @@ def compact(
                 item.action = "discard"
                 item.output_text = None
                 item.reason += "; discarded to meet budget"
-            item.estimated_tokens_after = estimate_tokens(item.output_text or "", chars_per_token)
+            item.estimated_tokens_after = estimate(item.output_text or "")
             current -= old - item.estimated_tokens_after
 
     warnings = []
@@ -229,4 +231,6 @@ def compact(
         chunks=scored,
         status=status,
         warnings=warnings,
+        model=model,
+        tokenizer=tokenizer_label(chars_per_token, model),
     )

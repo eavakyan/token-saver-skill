@@ -74,6 +74,8 @@ class CompactResult:
     chunks: list[ScoredChunk]
     status: Literal["ok", "infeasible"] = "ok"
     warnings: list[str] = field(default_factory=list)
+    model: str | None = None
+    tokenizer: str = "chars/4"
 
     @property
     def savings_ratio(self) -> float:
@@ -85,6 +87,8 @@ class CompactResult:
         return {
             "request": self.request,
             "mode": self.mode,
+            "model": self.model,
+            "tokenizer": self.tokenizer,
             "budget_tokens": self.budget_tokens,
             "estimated_tokens_before": self.estimated_tokens_before,
             "estimated_tokens_after": self.estimated_tokens_after,
