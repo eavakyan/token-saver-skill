@@ -66,6 +66,11 @@ def _state_scope(explicit: str | None = None) -> str:
     return f"{_project_root().name}:{branch}"
 
 
+def _request_metadata(args) -> dict:
+    request_id = getattr(args, "request_id", None) or os.getenv("TOKEN_SAVER_REQUEST_ID")
+    return {"request_id": request_id} if request_id else {}
+
+
 def _write_text_atomic(path: str | Path, text: str) -> None:
     target = Path(path)
     if not target.parent.exists():
@@ -135,11 +140,13 @@ def cmd_retrieve(args) -> int:
         "passages": [passage.to_dict() for passage in result.passages],
     }
     if not args.no_record:
+        metadata = {"stats": result.stats.to_dict(), "passages_returned": len(result.passages)}
+        metadata.update(_request_metadata(args))
         run = RunStore(_state_dir(config)).record(
             _state_scope(args.state_scope),
             "retrieve",
             {"mode": mode, "status": "ok"},
-            metadata={"stats": result.stats.to_dict(), "passages_returned": len(result.passages)},
+            metadata=metadata,
         )
         output["run"] = {"id": run["id"], "recorded": True}
     else:
@@ -166,13 +173,15 @@ def cmd_compact(args) -> int:
     if args.metrics_line:
         output["metrics_line"] = metric_line(result)
     if not args.no_record:
+        metadata = {"chunks": len(chunks)}
+        metadata.update(_request_metadata(args))
         run = RunStore(_state_dir(config)).record(
             _state_scope(args.state_scope),
             "compact",
             output["metrics"],
             model=result.model,
             tokenizer=result.tokenizer,
-            metadata={"chunks": len(chunks)},
+            metadata=metadata,
         )
         output["run"] = {"id": run["id"], "recorded": True}
         output["metrics"]["run_id"] = run["id"]
@@ -276,6 +285,17 @@ def cmd_metrics(args) -> int:
     config = load_config(args.config)
     scope = _state_scope(args.state_scope)
     store = RunStore(_state_dir(config))
+    if args.metrics_command == "begin":
+        run = store.start_request(scope)
+        _json_dump({"request_id": run["id"], "scope": scope, "recorded": True})
+        return 0
+    if args.metrics_command == "report":
+        value = store.request_report(args.request_id, scope)
+        if value is None:
+            _json_dump({"scope": scope, "found": False, "request_id": args.request_id})
+            return 1
+        _json_dump(value)
+        return 0
     if args.metrics_command == "summary":
         _json_dump(store.summary(scope))
         return 0
@@ -297,6 +317,7 @@ def cmd_metrics(args) -> int:
     payload = _read_input(args.input)
     usage = _provider_usage(payload)
     metadata = {"linked_run_id": payload["linked_run_id"]} if payload.get("linked_run_id") else {}
+    metadata.update(_request_metadata(args))
     run = store.record(
         scope,
         "provider_usage",
@@ -314,6 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", help="Optional TOML override; missing paths fail closed.")
     parser.add_argument("--mode", choices=["quality-first", "balanced", "extreme"])
     parser.add_argument("--state-scope", help="State namespace; defaults to repository and branch.")
+    parser.add_argument("--request-id", help="Isolate telemetry for one Token Saver invocation; use with metrics begin/report.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     doctor = sub.add_parser("doctor", help="Show effective configuration and state location.")
@@ -391,6 +413,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     metrics = sub.add_parser("metrics", help="Inspect append-only Token Saver run telemetry.")
     metrics_sub = metrics.add_subparsers(dest="metrics_command", required=True)
+    metrics_begin = metrics_sub.add_parser("begin", help="Start an isolated telemetry envelope for this invocation.")
+    metrics_begin.set_defaults(func=cmd_metrics)
+    metrics_report = metrics_sub.add_parser("report", help="Report only the operations linked to one invocation.")
+    metrics_report.add_argument("request_id")
+    metrics_report.set_defaults(func=cmd_metrics)
     metrics_summary = metrics_sub.add_parser("summary")
     metrics_summary.set_defaults(func=cmd_metrics)
     metrics_show = metrics_sub.add_parser("show")

@@ -39,6 +39,44 @@ class StateTests(unittest.TestCase):
             self.assertTrue(store.summary("scope")["provider_usage_available"])
             self.assertIn(first["id"], store.export_jsonl("scope"))
 
+    def test_concurrent_request_reports_are_isolated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = RunStore(directory)
+
+            def start_and_record(index: int) -> str:
+                request = store.start_request("shared")
+                store.record(
+                    "shared",
+                    "retrieve",
+                    {"status": "ok"},
+                    metadata={
+                        "request_id": request["id"],
+                        "passages_returned": index + 1,
+                        "stats": {
+                            "files_considered": index + 2,
+                            "files_scanned": index + 1,
+                            "bytes_scanned": 100 * (index + 1),
+                            "files_skipped_ignored": 0,
+                            "files_skipped_sensitive": 0,
+                            "files_skipped_symlink": 0,
+                            "limit_reached": False,
+                            "gitignore_applied": True,
+                        },
+                    },
+                )
+                return request["id"]
+
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                request_ids = list(pool.map(start_and_record, range(4)))
+
+            reports = [store.request_report(request_id, "shared") for request_id in request_ids]
+            self.assertTrue(all(report is not None for report in reports))
+            self.assertEqual(
+                {report["retrieval"]["passages_returned"] for report in reports if report},
+                {1, 2, 3, 4},
+            )
+            self.assertTrue(all(report["retrieval"]["runs"] == 1 for report in reports if report))
+
     def test_only_one_same_label_artifact_remains_accepted(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

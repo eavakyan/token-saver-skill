@@ -157,13 +157,14 @@ class RunStore:
         command: str,
         metrics: dict[str, Any] | None = None,
         *,
+        run_id: str | None = None,
         model: str | None = None,
         tokenizer: str | None = None,
         provider_usage: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         metrics = metrics or {}
-        run_id = uuid.uuid4().hex
+        run_id = run_id or uuid.uuid4().hex
         created_at = int(time.time())
         record = {
             "id": run_id,
@@ -207,6 +208,17 @@ class RunStore:
                 ),
             )
         return record
+
+    def start_request(self, scope: str) -> dict[str, Any]:
+        """Create an isolated telemetry envelope for one skill invocation."""
+        request_id = uuid.uuid4().hex
+        return self.record(
+            scope,
+            "request",
+            {"status": "started"},
+            run_id=request_id,
+            metadata={"request_id": request_id},
+        )
 
     @staticmethod
     def _decode(row: sqlite3.Row) -> dict[str, Any]:
@@ -286,6 +298,103 @@ class RunStore:
             "statuses": statuses,
             "actions": actions,
             "provider_usage_available": any(record["provider_usage"] is not None for record in records),
+            "provider_usage_totals": provider_totals,
+        }
+
+    def request_report(self, request_id: str, scope: str) -> dict[str, Any] | None:
+        """Return telemetry for exactly one invocation, never a scope-wide latest run."""
+        connection = self.db.connect()
+        try:
+            rows = connection.execute(
+                "SELECT * FROM runs WHERE scope=? ORDER BY created_at ASC, id ASC",
+                (scope,),
+            ).fetchall()
+        finally:
+            connection.close()
+        records = [self._decode(row) for row in rows]
+        request = next(
+            (
+                record for record in records
+                if record["id"] == request_id
+                and record["command"] == "request"
+                and record["metadata"].get("request_id") == request_id
+            ),
+            None,
+        )
+        if request is None:
+            return None
+        operations = [
+            record for record in records
+            if record["id"] != request_id and record["metadata"].get("request_id") == request_id
+        ]
+        operation_counts: dict[str, int] = {}
+        statuses: dict[str, int] = {}
+        retrieval_stats = {
+            "files_considered": 0,
+            "files_scanned": 0,
+            "bytes_scanned": 0,
+            "files_skipped_ignored": 0,
+            "files_skipped_sensitive": 0,
+            "files_skipped_symlink": 0,
+            "limit_reached": False,
+            "gitignore_applied": False,
+        }
+        retrieval_runs = 0
+        passages_returned = 0
+        compact_before = 0
+        compact_after = 0
+        provider_totals: dict[str, float] = {}
+        provider_usage_available = False
+
+        for record in operations:
+            command = record["command"]
+            operation_counts[command] = operation_counts.get(command, 0) + 1
+            status = record["status"] or "unknown"
+            statuses[status] = statuses.get(status, 0) + 1
+            if command == "retrieve":
+                retrieval_runs += 1
+                passages_returned += int(record["metadata"].get("passages_returned", 0))
+                stats = record["metadata"].get("stats", {})
+                if isinstance(stats, dict):
+                    for key in (
+                        "files_considered", "files_scanned", "bytes_scanned",
+                        "files_skipped_ignored", "files_skipped_sensitive", "files_skipped_symlink",
+                    ):
+                        value = stats.get(key)
+                        if isinstance(value, int) and not isinstance(value, bool):
+                            retrieval_stats[key] += value
+                    for key in ("limit_reached", "gitignore_applied"):
+                        retrieval_stats[key] = retrieval_stats[key] or bool(stats.get(key))
+            if command == "compact":
+                compact_before += int(record["estimated_tokens_before"] or 0)
+                compact_after += int(record["estimated_tokens_after"] or 0)
+            if record["provider_usage"]:
+                provider_usage_available = True
+                for key in ("input_tokens", "output_tokens", "cached_input_tokens", "total_tokens", "cost_usd"):
+                    value = record["provider_usage"].get(key)
+                    if isinstance(value, (int, float)) and not isinstance(value, bool):
+                        provider_totals[key] = provider_totals.get(key, 0) + value
+
+        compact_avoided = max(0, compact_before - compact_after)
+        return {
+            "request_id": request_id,
+            "scope": scope,
+            "started_at": request["created_at"],
+            "operations": operation_counts,
+            "statuses": statuses,
+            "retrieval": {
+                "runs": retrieval_runs,
+                "passages_returned": passages_returned,
+                **retrieval_stats,
+            },
+            "compaction": {
+                "runs": operation_counts.get("compact", 0),
+                "estimated_tokens_before": compact_before,
+                "estimated_tokens_after": compact_after,
+                "estimated_tokens_avoided": compact_avoided,
+                "estimated_savings_percent": round(compact_avoided / compact_before * 100, 1) if compact_before else 0.0,
+            },
+            "provider_usage_available": provider_usage_available,
             "provider_usage_totals": provider_totals,
         }
 

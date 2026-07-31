@@ -150,10 +150,24 @@ token-saver metrics show <run-id>
 token-saver metrics export --output token-saver-runs.jsonl
 ```
 
+### Per-request reports, including parallel jobs
+
+Start every explicit Token Saver invocation with its own request ID, attach it to every recording command, and render the final report from that ID only. This keeps concurrent jobs on a shared branch from mixing or omitting statistics:
+
+```bash
+token-saver metrics begin
+# Read request_id from the JSON result.
+token-saver --request-id <request-id> retrieve --root . --query "OAuth refresh token validation"
+token-saver --request-id <request-id> compact --input context.json --output handoff.json
+token-saver metrics report <request-id>
+```
+
+`metrics report` includes exact retrieval scan and passage counts, per-request statuses, compaction estimates when compaction ran, and aggregate provider usage when supplied. Do not use `metrics summary` or a latest-run heuristic for a final request report: both are scope-wide and therefore ambiguous when jobs run in parallel. For a small direct task with no retrieval or compaction, report the zero operation counts rather than claiming its statistics are unavailable.
+
 Provider/API usage is not visible to the skill automatically. If the platform supplies aggregate usage metadata, it can be recorded separately without storing prompt content:
 
 ```bash
-token-saver metrics record --input provider-usage.json
+token-saver --request-id <request-id> metrics record --input provider-usage.json
 ```
 
 When `$token-saver` is invoked, the agent should append a `Token Saver request report` after its normal task summary. Estimated counts must remain labeled as estimates; provider usage and billing must be labeled unavailable unless supplied by the platform or caller.
