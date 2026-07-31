@@ -30,6 +30,8 @@ python3 scripts/install.py --platform codex --scope global
 ```bash
 token-saver retrieve --root . --query "specific search terms"
 token-saver compact --input context.json --output handoff.json --save-handoff
+token-saver metrics begin
+token-saver metrics report <request-id>
 token-saver metrics summary
 token-saver metrics export --output token-saver-runs.jsonl
 token-saver handoff show
@@ -51,6 +53,8 @@ token-saver validate-output answer.json --json
 8. Validate the result before reporting completion.
 9. Save durable, non-obvious outcomes to AgentPrizm; leave routine edits and recoverable facts in the repository.
 
+For every explicit invocation, begin a request telemetry envelope, pass its ID to recording commands, and use `metrics report <request-id>` for the final report. This is required for correct per-job statistics when work runs in parallel; do not infer a request report from scope-wide metrics.
+
 ## Safety properties
 
 - Retrieval is bounded, ignore-aware, secret-aware, and symlink-safe.
@@ -58,7 +62,7 @@ token-saver validate-output answer.json --json
 - Exact content is referenced only when its source is verified as reopenable.
 - Protected content over budget returns an explicit infeasible status.
 - Repository state uses concurrency-safe SQLite transactions and repository/branch scoping.
-- Retrieval and compaction append derived run telemetry by default; use `--no-record` to opt out.
+- Retrieval and compaction append derived run telemetry by default; request IDs keep concurrent job reports separate; use `--no-record` to opt out.
 - The skill appends a `Token Saver request report` after its normal task summary when invoked.
 
 For complete commands and examples, see the [README](https://github.com/eavakyan/token-saver-skill#readme).

@@ -25,6 +25,20 @@ For a small self-contained request, answer directly. Avoid loading files, histor
 
 For a large, iterative, retrieval-heavy, output-constrained, or retry-prone request, use the workflow below. Run deterministic commands only when their output will save more context or prevent rework than the call costs.
 
+## Per-request telemetry
+
+Every explicit Token Saver invocation must use its own telemetry envelope, including when the task needs no retrieval or compaction. This prevents parallel jobs on the same branch from omitting, mixing, or borrowing each other's statistics.
+
+At the beginning, run `token-saver metrics begin` and retain its `request_id`. Pass that identifier to every recording command in this invocation:
+
+```bash
+token-saver --request-id <request-id> retrieve --root . --query "<specific search terms>"
+token-saver --request-id <request-id> compact --input context.json --output handoff.json
+token-saver --request-id <request-id> metrics record --input provider-usage.json
+```
+
+Before writing the final response, run `token-saver metrics report <request-id>`. Use only that output for the request report; never use a scope-wide summary or a "latest run" lookup. For a repository or other nontrivial task, run at least one narrow retrieval so the report includes scan and passage statistics. A truly small direct task may have zero retrieval and compaction runs; say so explicitly rather than calling the statistics unavailable.
+
 ## Full workflow
 
 ### 1. Form the task contract
@@ -62,7 +76,7 @@ Add `--high-stakes` for consequential security, production, legal, medical, or f
 Search filenames and symbols first. Read narrow passages, then expand only when dependencies or missing evidence require it.
 
 ```bash
-token-saver retrieve --root . --query "<specific search terms>"
+token-saver --request-id <request-id> retrieve --root . --query "<specific search terms>"
 ```
 
 Treat retrieval output as candidate context, not proof of completeness. Inspect its scan statistics and broaden deliberately if a limit was reached. Never bypass ignored-file, sensitive-file, or root-boundary protections merely to improve recall.
@@ -82,7 +96,7 @@ Classify context chunks as:
 Run:
 
 ```bash
-token-saver compact --input context.json --output handoff.json
+token-saver --request-id <request-id> compact --input context.json --output handoff.json
 ```
 
 The normal output is a safe handoff and decision audit; it never echoes discarded raw chunks. Exact content becomes a reference only when its source is explicitly marked verified and reopenable. If `status` is `infeasible`, preserve protected content and either raise the budget, narrow the task, or start a fresh task. Never silently drop protected material to force the metric under budget.
@@ -146,9 +160,10 @@ After the normal user-facing task summary, append this report as the final secti
 
 ```text
 Token Saver request report
-- run: <run id, or not recorded>
-- estimated input: <before> -> <after>; avoided: <count> (<percent>)
-- quality/status: <status and any material warning>
+- run: <request_id, or not recorded>
+- retrieval: <runs, files scanned, relevant passages, and material scan warnings>
+- compaction estimate: <before> -> <after>; avoided: <count> (<percent>), or no compaction run
+- quality/status: <per-request statuses and any material warning>
 - provider usage/cost: <reported values, or unavailable>
 ```
 

@@ -62,7 +62,7 @@ class DistributionTests(unittest.TestCase):
             doctor = subprocess.run([str(command), "doctor"], check=True, capture_output=True, text=True)
             payload = json.loads(doctor.stdout)
             self.assertTrue(payload["ok"])
-            self.assertEqual(payload["version"], "1.1.0")
+            self.assertEqual(payload["version"], "1.2.0")
             self.assertEqual(payload["config"], "packaged-default")
 
             fake_home = temporary / "home"
@@ -70,6 +70,7 @@ class DistributionTests(unittest.TestCase):
             child_env = os.environ.copy()
             child_env["HOME"] = str(fake_home)
             child_env["PATH"] = os.pathsep.join((str(bin_dir), child_env.get("PATH", "")))
+            child_env["TOKEN_SAVER_STATE_DIR"] = str(temporary / "state")
             subprocess.run(
                 [str(python), str(source / "scripts/install.py"), "--platform", "codex", "--scope", "global"],
                 check=True,
@@ -89,3 +90,36 @@ class DistributionTests(unittest.TestCase):
                 env=child_env,
             )
             self.assertEqual(json.loads(routed.stdout)["model"], "gpt-5.6-terra")
+            begun = subprocess.run(
+                [str(command), "metrics", "begin"],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=child_env,
+            )
+            request_id = json.loads(begun.stdout)["request_id"]
+            repository = temporary / "repository"
+            repository.mkdir()
+            (repository / "target.py").write_text("def token_saver_report():\n    return 'ok'\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q", str(repository)], check=True, capture_output=True, text=True)
+            retrieval = subprocess.run(
+                [
+                    str(command), "--request-id", request_id, "retrieve",
+                    "--root", str(repository), "--query", "token saver report",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=child_env,
+            )
+            self.assertTrue(json.loads(retrieval.stdout)["run"]["recorded"])
+            report = subprocess.run(
+                [str(command), "metrics", "report", request_id],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=child_env,
+            )
+            report_payload = json.loads(report.stdout)
+            self.assertEqual(report_payload["request_id"], request_id)
+            self.assertEqual(report_payload["retrieval"]["runs"], 1)
