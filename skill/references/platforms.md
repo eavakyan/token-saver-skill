@@ -26,6 +26,8 @@ python3 scripts/install.py --platform codex --scope global
 
 Invoke explicitly with `$token-saver`. The skill disables implicit invocation to avoid spending its full instruction budget on ordinary tasks. Start a new Codex session if a newly installed or updated skill is not visible.
 
+Codex can omit installed skills from the initial advertised list when the skill-metadata budget is full. A valid symlink therefore proves installation, not that the current session loaded the skill. Confirm the skill through `/skills` or the UI skill picker and start a new session if it is absent. Because an undiscovered `SKILL.md` cannot tell the agent to run `token-saver doctor`, use the optional instruction shim only when repeated catalog omissions justify its small cost on every request.
+
 ## Claude Code
 
 The installer can also create the conventional Claude Code symlink:

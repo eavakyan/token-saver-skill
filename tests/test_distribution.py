@@ -13,6 +13,22 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class DistributionTests(unittest.TestCase):
+    def test_skill_stays_lean_without_losing_required_guards(self):
+        skill = (ROOT / "skill/SKILL.md").read_text(encoding="utf-8")
+        self.assertLessEqual(len(skill.split()), 800)
+        for required in (
+            "token-saver doctor",
+            "token-saver metrics begin",
+            "--request-id <request-id> retrieve",
+            "--request-id <request-id> compact",
+            "metadata.essential=true",
+            "metadata.reopenable=true",
+            "status=infeasible",
+            "Token Saver request report",
+            "provider usage/cost",
+        ):
+            self.assertIn(required, skill)
+
     def test_clean_wheel_cli_and_symlinked_skill_work_together(self):
         with tempfile.TemporaryDirectory() as directory:
             temporary = Path(directory)
