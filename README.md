@@ -109,13 +109,13 @@ python3 scripts/uninstall.py --platform codex --scope global
 token-saver retrieve \
   --root . \
   --query "OAuth refresh token validation" \
-  --top-files 8 \
-  --passages-per-file 3 \
-  --context-lines 6
+  --top-files 6 \
+  --passages-per-file 2 \
+  --context-lines 5
 ```
 
 Retrieval skips symlinks, Git-ignored files, configured sensitive names, recognized secret material, binary files, and common generated directories. It reports file and byte limits so truncated scans are visible.
-Increase `--context-lines` around a promising hit before spending more calls on reworded queries.
+Balanced mode stages retrieval at 6 files and 2 passages per file. Increase `--top-files`, `--passages-per-file`, or `--context-lines` with the same query only when dependencies or evidence remain incomplete.
 
 ### Build a safe compact handoff
 
@@ -159,10 +159,10 @@ token-saver metrics begin
 # Read request_id from the JSON result.
 token-saver --request-id <request-id> retrieve --root . --query "OAuth refresh token validation"
 token-saver --request-id <request-id> compact --input context.json --output handoff.json
-token-saver metrics report <request-id>
+token-saver metrics report <request-id> --format text
 ```
 
-`metrics report` includes exact retrieval scan and passage counts, per-request statuses, compaction estimates when compaction ran, and aggregate provider usage when supplied. Do not use `metrics summary` or a latest-run heuristic for a final request report: both are scope-wide and therefore ambiguous when jobs run in parallel. For a small direct task with no retrieval or compaction, report the zero operation counts rather than claiming its statistics are unavailable.
+The text report is ready to append verbatim to the final response. JSON remains the default for programmatic callers. Both formats include exact retrieval scan and passage counts, per-request statuses and warnings, compaction estimates when compaction ran, and aggregate provider usage when supplied. Do not use `metrics summary` or a latest-run heuristic for a final request report: both are scope-wide and therefore ambiguous when jobs run in parallel. For a small direct task with no retrieval or compaction, report the zero operation counts rather than claiming its statistics are unavailable.
 
 Provider/API usage is not visible to the skill automatically. If the platform supplies aggregate usage metadata, it can be recorded separately without storing prompt content:
 

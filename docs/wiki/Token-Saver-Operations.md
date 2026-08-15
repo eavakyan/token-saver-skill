@@ -31,7 +31,7 @@ python3 scripts/install.py --platform codex --scope global
 token-saver retrieve --root . --query "specific search terms"
 token-saver compact --input context.json --output handoff.json --save-handoff
 token-saver metrics begin
-token-saver metrics report <request-id>
+token-saver metrics report <request-id> --format text
 token-saver metrics summary
 token-saver metrics export --output token-saver-runs.jsonl
 token-saver handoff show
@@ -53,7 +53,7 @@ token-saver validate-output answer.json --json
 8. Validate the result before reporting completion.
 9. Save durable, non-obvious outcomes to AgentPrizm; leave routine edits and recoverable facts in the repository.
 
-For every explicit invocation, begin a request telemetry envelope, pass its ID to recording commands, and use `metrics report <request-id>` for the final report. This is required for correct per-job statistics when work runs in parallel; do not infer a request report from scope-wide metrics.
+For every explicit invocation, begin a request telemetry envelope, pass its ID to recording commands, and use `metrics report <request-id> --format text` for the final report. Append that output verbatim. This is required for correct per-job statistics when work runs in parallel; do not infer a request report from scope-wide metrics.
 
 ## Safety properties
 

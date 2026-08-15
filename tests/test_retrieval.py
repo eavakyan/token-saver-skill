@@ -61,3 +61,37 @@ class RetrievalTests(unittest.TestCase):
             narrow = retrieve_with_stats(root, "unique target", self.policy, context_lines=1)
             wide = retrieve_with_stats(root, "unique target", self.policy, context_lines=6)
             self.assertGreater(len(wide.passages[0].text), len(narrow.passages[0].text))
+
+    def test_balanced_defaults_can_expand_without_changing_the_query(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index in range(8):
+                (root / f"parser-{index}.py").write_text(f"def parser_token_{index}(): pass\n", encoding="utf-8")
+
+            staged = retrieve_with_stats(root, "parser token", self.policy)
+            expanded = retrieve_with_stats(
+                root,
+                "parser token",
+                self.policy,
+                top_files=8,
+                passages_per_file=3,
+            )
+
+            self.assertEqual(len({passage.path for passage in staged.passages}), 6)
+            self.assertEqual(len({passage.path for passage in expanded.passages}), 8)
+
+    def test_balanced_defaults_keep_the_strongest_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            expected = {"refresh.py", "lock.py", "proof.py"}
+            for name in expected:
+                (root / name).write_text(
+                    "refresh token concurrency lock proof " * 8,
+                    encoding="utf-8",
+                )
+            for index in range(10):
+                (root / f"weak-{index}.py").write_text("refresh helper\n", encoding="utf-8")
+
+            result = retrieve_with_stats(root, "refresh token concurrency lock proof", self.policy)
+
+            self.assertTrue(expected.issubset({passage.path for passage in result.passages}))
