@@ -25,7 +25,7 @@ class DistributionTests(unittest.TestCase):
             "metadata.reopenable=true",
             "status=infeasible",
             "Token Saver request report",
-            "provider usage/cost",
+            "--format text",
         ):
             self.assertIn(required, skill)
 
@@ -78,7 +78,7 @@ class DistributionTests(unittest.TestCase):
             doctor = subprocess.run([str(command), "doctor"], check=True, capture_output=True, text=True)
             payload = json.loads(doctor.stdout)
             self.assertTrue(payload["ok"])
-            self.assertEqual(payload["version"], "1.2.0")
+            self.assertEqual(payload["version"], "1.2.1")
             self.assertEqual(payload["config"], "packaged-default")
 
             fake_home = temporary / "home"
@@ -139,3 +139,16 @@ class DistributionTests(unittest.TestCase):
             report_payload = json.loads(report.stdout)
             self.assertEqual(report_payload["request_id"], request_id)
             self.assertEqual(report_payload["retrieval"]["runs"], 1)
+            text_report = subprocess.run(
+                [str(command), "metrics", "report", request_id, "--format", "text"],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=child_env,
+            )
+            self.assertTrue(text_report.stdout.startswith("Token Saver request report\n"))
+            self.assertIn(f"- run: `{request_id}`", text_report.stdout)
+            self.assertIn("- retrieval: 1 run(s);", text_report.stdout)
+            self.assertIn("- compaction estimate: no compaction run", text_report.stdout)
+            self.assertIn("- provider usage/cost: unavailable", text_report.stdout)
+            self.assertNotIn("{", text_report.stdout)

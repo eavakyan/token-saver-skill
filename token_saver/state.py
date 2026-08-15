@@ -343,6 +343,7 @@ class RunStore:
         passages_returned = 0
         compact_before = 0
         compact_after = 0
+        warnings: list[str] = []
         provider_totals: dict[str, float] = {}
         provider_usage_available = False
 
@@ -351,6 +352,9 @@ class RunStore:
             operation_counts[command] = operation_counts.get(command, 0) + 1
             status = record["status"] or "unknown"
             statuses[status] = statuses.get(status, 0) + 1
+            for warning in record["warnings"]:
+                if warning not in warnings:
+                    warnings.append(warning)
             if command == "retrieve":
                 retrieval_runs += 1
                 passages_returned += int(record["metadata"].get("passages_returned", 0))
@@ -382,6 +386,7 @@ class RunStore:
             "started_at": request["created_at"],
             "operations": operation_counts,
             "statuses": statuses,
+            "warnings": warnings,
             "retrieval": {
                 "runs": retrieval_runs,
                 "passages_returned": passages_returned,

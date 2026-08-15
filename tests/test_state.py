@@ -48,7 +48,7 @@ class StateTests(unittest.TestCase):
                 store.record(
                     "shared",
                     "retrieve",
-                    {"status": "ok"},
+                    {"status": "ok", "warnings": [f"warning-{index}"]},
                     metadata={
                         "request_id": request["id"],
                         "passages_returned": index + 1,
@@ -76,6 +76,10 @@ class StateTests(unittest.TestCase):
                 {1, 2, 3, 4},
             )
             self.assertTrue(all(report["retrieval"]["runs"] == 1 for report in reports if report))
+            self.assertEqual(
+                {tuple(report["warnings"]) for report in reports if report},
+                {(f"warning-{index}",) for index in range(4)},
+            )
 
     def test_only_one_same_label_artifact_remains_accepted(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -15,7 +15,7 @@ from .artifacts import ArtifactStore
 from . import __version__
 from .compaction import compact
 from .config import load_config, resolve_mode
-from .metrics import compact_metrics, metric_line
+from .metrics import compact_metrics, metric_line, request_report_text
 from .models import ContextChunk
 from .output_guard import validate_output
 from .retrieval import retrieve_with_stats
@@ -294,7 +294,10 @@ def cmd_metrics(args) -> int:
         if value is None:
             _json_dump({"scope": scope, "found": False, "request_id": args.request_id})
             return 1
-        _json_dump(value)
+        if args.format == "text":
+            print(request_report_text(value))
+        else:
+            _json_dump(value)
         return 0
     if args.metrics_command == "summary":
         _json_dump(store.summary(scope))
@@ -417,6 +420,7 @@ def build_parser() -> argparse.ArgumentParser:
     metrics_begin.set_defaults(func=cmd_metrics)
     metrics_report = metrics_sub.add_parser("report", help="Report only the operations linked to one invocation.")
     metrics_report.add_argument("request_id")
+    metrics_report.add_argument("--format", choices=["json", "text"], default="json")
     metrics_report.set_defaults(func=cmd_metrics)
     metrics_summary = metrics_sub.add_parser("summary")
     metrics_summary.set_defaults(func=cmd_metrics)

@@ -34,8 +34,8 @@ compact_ratio = 0.60
 fresh_task_ratio = 0.80
 min_chunk_score = 0.35
 summary_ratio = 0.35
-top_files = 8
-passages_per_file = 3
+top_files = 6
+passages_per_file = 2
 default_output_words = 500
 
 [modes.extreme]
@@ -45,7 +45,7 @@ compact_ratio = 0.48
 fresh_task_ratio = 0.68
 min_chunk_score = 0.50
 summary_ratio = 0.20
-top_files = 5
+top_files = 4
 passages_per_file = 2
 default_output_words = 250
 

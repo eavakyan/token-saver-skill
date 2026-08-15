@@ -48,7 +48,7 @@ For any nontrivial repository task, run at least one narrow retrieval:
 token-saver --request-id <request-id> retrieve --root . --query "<specific terms>"
 ```
 
-Treat results as candidate context, not proof of completeness. Check scan statistics and `limit_reached`. Expand a promising query with `--context-lines` before issuing several reworded searches. Never bypass ignore, sensitive-file, symlink, or root-boundary protections to improve recall.
+Balanced retrieval starts with at most 6 files and 2 passages per file; use `--mode quality-first` when missing evidence is costly. Treat results as candidate context, not proof of completeness. Check scan statistics and `limit_reached`; when evidence is incomplete, rerun the same query with larger `--top-files`, `--passages-per-file`, or `--context-lines` instead of broadening everything or issuing several reworded searches. Never bypass ignore, sensitive-file, symlink, or root-boundary protections to improve recall.
 
 ### Compact only when context is materially large
 
@@ -75,23 +75,12 @@ If aggregate provider usage is supplied, record only those aggregate fields:
 
 ```bash
 token-saver --request-id <request-id> metrics record --input provider-usage.json
-token-saver metrics report <request-id>
+token-saver metrics report <request-id> --format text
 ```
 
 Never substitute `metrics summary` or a latest-run lookup. Telemetry must not store raw requests, context chunks, discarded text, secrets, or credentials.
 
-After the normal task summary, append this terminal section in the same final response:
-
-```text
-Token Saver request report
-- run: <request_id, or not recorded>
-- retrieval: <runs, files scanned, relevant passages, and material scan warnings>
-- compaction estimate: <before> -> <after>; avoided: <count> (<percent>), or no compaction run
-- quality/status: <per-request statuses and any material warning>
-- provider usage/cost: <reported values, or unavailable>
-```
-
-Label character- or model-tokenizer counts as estimates, never billing data. If telemetry could not start, report `not recorded` and why.
+Append the text report, beginning `Token Saver request report`, verbatim after the normal task summary as the terminal section of the same final response. It labels compaction counts as estimates rather than billing data. If telemetry could not start, append the same five fields with `run: not recorded` and the reason under quality/status.
 
 ## Stop
 
