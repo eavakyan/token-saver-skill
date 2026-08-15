@@ -81,7 +81,7 @@ This creates:
 
 The symlink keeps the repository as the canonical source. The installer is idempotent when the correct link already exists. With `--force`, an existing target is moved to a timestamped backup rather than deleted.
 
-Start a new Codex session if the skill does not appear immediately. Invoke it explicitly:
+Use `/skills` or the UI skill picker to confirm discovery, and start a new Codex session if the skill does not appear immediately. Codex may omit installed skills from the initial advertised list when its skill-metadata budget is full, so a valid symlink alone does not prove that the current session loaded the skill. Invoke it explicitly:
 
 ```text
 $token-saver Inspect this repository and fix the failing tests with the smallest sufficient context.
