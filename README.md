@@ -2,6 +2,13 @@
 
 Token Saver is an explicit-invocation Agent Skill and deterministic Python toolkit for reducing context and output tokens without dropping task-critical information.
 
+> [!IMPORTANT]
+> Token Saver is provided **“AS IS” and “WITH ALL FAULTS.”** Running agent and
+> command-line tooling can modify data or systems, expose sensitive information,
+> call third-party services, or produce inaccurate output. You assume all risks
+> and responsibility for your use. Read the full [Disclaimer](DISCLAIMER.md) and
+> [MIT License](LICENSE) before installing or running this project.
+
 It provides:
 
 - bounded, ignore-aware source retrieval;
